@@ -1,6 +1,6 @@
 ## Qubyte Sized Quantum Computing
 
-Quantum Computing, but bite sized (byte sized? Or, qubyte sized??)  
+Quantum Computing, but bite sized.
 
 
 #### Resources
