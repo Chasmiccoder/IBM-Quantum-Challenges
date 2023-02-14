@@ -1,0 +1,206 @@
+// Demo from "Silq: High-Level Quantum Programming | Qiskit Seminar Series with Benjamin Bichsel", https://www.youtube.com/watch?v=I8MqcP2Q_Kw
+
+// === Measurement ===
+
+// measure is a function that is not mfree
+// basically, you cannot undo a measurement
+// error recognized: reversed function must be mfree
+def reverse_measurement(){
+    return reverse(measure);
+}
+
+// Try to hide a measurement and make it look it the function is 'reversible'
+// passing a function that is not mfree 
+// error recognized: reversed function must be mfree
+def reverse_f(f:𝔹 !→ 𝔹){
+    return reverse(f);
+}
+
+// this function tries to hide a measurement
+// silq recognizes this
+def hide_measurement(q:𝔹){
+    measure(q);
+    return 0:𝔹;
+}
+
+def reverse_hidden_measurement(){
+    reverse_f(hide_measurement);
+}
+
+// proper way to specify that a function is mfree
+def reverse_f2(f:𝔹 !→ mfree 𝔹){
+    return reverse(f);
+}
+
+// → means that we have a function
+// !→ means that the function is classically known
+
+// if qubit c is 1, then measure qubit q
+// this doesn't work because if c is a qubit, we'll have to measure it to figure out if it is 1
+// cannot call function 'measure[𝔹]' in 'mfree' context
+def conditional_measurement(const c:𝔹, q:𝔹){
+    if c{
+        q := measure(q);
+    }
+    return q;
+}
+
+// proper way of doing the above - mention that c is classical
+def conditional_measurement2(const c:!𝔹, q:𝔹){
+    if c{
+        q := measure(q);
+    }
+    return q;
+}
+
+// === Linear Type Systems ===
+
+// error recognized: parameter 's' is not consumed
+def implicit_measurement[n:!ℕ](s:uint[n]){
+    // say s holds the unsigned integer 7
+    t := s % 2;
+    // t is now |1>
+    // the system itself is in |7>ₛ ⊗ |1>ₜ
+
+    return t;
+}
+
+// we need to specify that s will remain unchanged
+def implicit_measurement2[n:!ℕ](const s:uint[n]){
+    t := s % 2;
+    return t;
+}
+
+// error recognized: undefined identifier s
+def use_consumed(s:𝔹){
+    // say s is |0>
+    t := H(s);
+    // now s is |+>
+    return (s,t);
+}
+
+// one way of fixing the above
+def use_consumed_dup(s:𝔹){
+    // say s is |0>
+    x := dup(s);
+    // now the system is in |0>ₛ ⊗ |0>ₜ
+    t := H(x);
+    // now the system is in |0>ₛ ⊗ |+>ₜ
+    return (s,t);
+}
+
+// another way of fixing the above
+// if you annotate s as const, then silq will do this implicitly
+def use_consumed_implicit_dup(const s:𝔹){
+    // the system is in |0>ₛ
+    t := H(s);
+    // now the system is in |0>ₛ ⊗ |+>ₜ
+    return t;
+}
+
+// you can explicitly specify the return type
+def f1(const s:𝔹):𝔹{
+    t := H(s);
+    return t;
+}
+
+// when the return data contains qubit and classical data
+def f2(const s:𝔹):𝔹 x (!𝔹){
+    t := H(s);
+    return t; // error: 𝔹 is incompatible with return type 𝔹 × !𝔹
+}
+
+// === Uncomputation ===
+
+// with lifted, all args are implicitly const
+def my_or(s:𝔹, t:𝔹)lifted{
+    // |0>ₛ ⊗ |0>ₜ
+    return ! (!s && !t);
+    // |0>ₛ ⊗ |1>ₜ ⊗ |1>
+}
+
+/*
+How Temporary Values are handled (Uncomputation)
+
+OR of 3 variables
+
+Initially, the system is in |0>ₓ ⊗ |1>ₐ  ⊗ |0>ₜ
+s := (x || a) || t;
+Now the system is in |0>ₓ ⊗ |1>ₐ  ⊗ |0>ₜ ⊗ |1>ₛ
+
+How this works internally
+
+Initial state: |0>ₓ ⊗ |1>ₐ  ⊗ |0>ₜ
+To perform x || a, we need 1 ancilla qubit
+Apply U_or to the qubits x and a, with ancilla e
+The system will then go to |0>ₓ ⊗ |1>ₐ  ⊗ |0>ₜ ⊗ |1>ₑ
+Where the subscript e is the qubit that stores x || a
+
+Then we introduce one more qubit s, to store the final result e || t
+Apply U_or to the qubits e and t, with ancilla s
+The system will then go to |0>ₓ ⊗ |1>ₐ  ⊗ |0>ₜ ⊗ |1>ₑ ⊗ |1>ₛ
+
+Now we have an extra qubit e, which was used as a temporary variable
+We need to uncompute this qubit, as directly measuring it will collapse the superposition
+We can do this by applying the adjoint of U_or on qubits x, a, and e
+Then the system will go to |0>ₓ ⊗ |1>ₐ  ⊗ |0>ₜ ⊗ |0>ₑ ⊗ |1>ₛ
+Now we can safely measure e to get the needed result |0>ₓ ⊗ |1>ₐ  ⊗ |0>ₜ ⊗ |1>ₛ
+
+This whole thing can be summarized as -
+s := (x || a) || t;
+is,
+e := x || a;
+s:= e || t;
+forget(e);
+
+*/
+
+
+def overwrite(const s:𝔹, const t:𝔹){
+    // |0>ₛ ⊗ |1>ₜ
+    u := s || t;
+
+    // |0>ₛ ⊗ |1>ₜ ⊗ |1>ᵤ
+    u = 0:𝔹;  // implicitly uncomputes old values of u
+    
+    // |0>ₛ ⊗ |1>ₜ ⊗ |0>ᵤ
+    return u;
+}
+
+// example where uncomputation does not work
+// error recognized: cannot synthesize forget expression for 't'
+// If we forget t, then we would have consumed s for no reason
+// the final state would be empty (i.e, no state), even though we didn't measure s
+
+def uncompute_non_const(s:𝔹){
+    // |0>ₛ + |1>ₛ
+    t := X(s);
+    // |1>ₜ + |0>ₜ
+    forget(t);
+    // (empty)
+}
+
+// to fix the above,
+// this works because s is still around for uncomputation
+def uncompute_non_const_dup(s:𝔹){
+    // |0>ₛ + |1>ₛ
+    t := X(dup(s));
+    // |0>ₛ ⊗ |1>ₜ + |1>ₛ ⊗ |0>ₜ
+    forget(t);
+    // |0>ₛ + |1>ₛ
+    return s;
+}
+
+// Uncompute a non qfree expression
+// error recognized: cannot synthesize forget expression for 't'
+def uncomput_non_qfree(s:𝔹){
+    // |1>ₛ
+    t := H(dup(s));
+    // |1>ₛ ⊗ |->ₜ = |1>ₛ ⊗ |0>ₜ - |1>ₛ ⊗ |1>ₜ
+    forget(t);
+    // |1>ₛ - |1>ₛ = 0 (state with norm 0)
+    // it's not clear what should happen here
+    return s;
+}
+
+

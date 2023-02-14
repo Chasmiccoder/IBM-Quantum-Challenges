@@ -1,0 +1,69 @@
+/*
+Exercise 1 from https://silq.ethz.ch/downloads/silq-exercise.pdf
+
+Task:
+Given an implementation of Grover's search, create a new oracle 
+function to find x between 10 and 20 with x % 2 = 1 and x % 5 = 4.
+*/
+
+def groverDiffusion[n:!ℕ](cand:uint[n]) mfree: uint[n]{
+    for k in [0..n) {
+        cand[k] := H(cand[k]);
+    }
+
+    if cand != 0 {
+        phase(π);
+    }
+
+    for k in [0..n) {
+        cand[k] := H(cand[k]);
+    }
+
+    return cand;
+}
+
+def grover[n:!ℕ](f:uint[n] !→ lifted 𝔹) {
+    nIterations := floor(π/(4 * asin(2^(-n/2))));
+
+    cand := 0:uint[n];
+
+    for k in [0..n) {
+        cand[k] := H(cand[k]);
+    }
+
+    for k in [0..nIterations) {
+        b := f(cand);
+        if b {
+            phase(π);
+        }
+        forget(b = f(cand));
+        cand := groverDiffusion(cand);
+    }
+    return measure(cand);
+}
+
+def dummy_oracle(x:uint[5]) lifted {
+    // find x between 10 and 20 with x % 2 == 1 and x % 5 == 4
+    // the answer should be 19
+    c1 := x % 2;
+    c2 := x % 5;
+    if x >= 10 && x <= 20 && c1 == 1 && c2 == 4 {
+        return 1:𝔹;
+    } else {
+        return 0:𝔹;
+    }
+
+    /*
+    (Alternatively)
+    Answer given:
+    return
+        x % 2 == 1 &&
+        10 <= x &&
+        x <= 20 &&
+        x % 5 == 4;
+    */
+}
+
+def main() {
+    return grover(dummy_oracle);
+}

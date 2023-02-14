@@ -1,0 +1,7 @@
+// Code to test installation
+
+// Erroneous Code
+// def main(){ x:=H(false); }
+
+// Correct Code
+def main(){ x:=H(false); return measure(x); }

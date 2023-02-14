@@ -1,0 +1,232 @@
+// From the silq documentation: https://silq.ethz.ch/documentation
+
+// === Type Conversion ===
+
+// Type Annotation
+// this function creates zeroes of various types
+def zeroes(){
+    a := 0:!𝔹; // classical bit in 0 state
+    b := a:𝔹;  // quantum bit in |0> state
+    c := 0:uint[3]; // quantum 3-bit unsigned integer in |000> state
+    d := vector(4, false):𝔹[]; // quantum 4-bit vector in |0000> state
+    return (a,b,c,d);
+}
+
+def plusState():𝔹{
+    x := false:𝔹; // x := false  - is of classical type
+    x := H(x);
+    return x;
+}
+
+// Safe Type Conversion
+def safe_conversions(){
+    // !int[32] to !ℤ
+    a := 0:!int[32];
+    b := a as !ℤ; 
+
+    // !ℤ to !int[32] (wraparound in case of overflow)
+    c := 0:!ℤ;
+    d := c as !int[32];
+
+    // 𝔹^10 to int[10]
+    e := vector(10, 0:𝔹);
+    f := e as int[10];
+
+    // int[10] to 𝔹^10
+    g := 0:int[10];
+    h := g as 𝔹^10;
+
+    // convert element-wise
+    i := (0,1,2):!ℕ^3;
+    j := i as !ℕ x !ℕ x !int[3];
+}
+
+// Unsafe Type Coercion
+def unsafe_conversions(){
+    // coerce array to vector
+    a := array(4, true):𝔹[];
+    b := a coerce 𝔹^4;
+}
+
+// === Statements and Expressions ===
+
+// Silq supports both classical and quantum control flow
+// Classical control flow poses no restrictions on the two branches
+def measureInBasis(b:!𝔹, x:𝔹):!𝔹{
+    // if b = 1, measure x in the |+>, |-> basis
+    // if b = 0, measure x in the |0>, |1> basis
+    if b{
+        x := H(x);
+        return measure(x);
+    } else {  
+        return measure(x);
+    }   
+}
+
+// Quantum Control Flow
+def cnot(const x:𝔹, y:𝔹):𝔹{
+    if x{
+        y := X(y);
+    }
+    return y;
+}
+
+// Quantum control flow is regulated by Silq
+// error recognized: cannot call function 'measure[int[n]]' in 'mfree' context
+def conditionalMeasure[n:!ℕ](const b:𝔹, x:int[n]):𝟙{
+    if b{
+        x := measure(x);
+    }
+}
+
+/*
+Proper use of quantum control flow:
+* Both branches are mfree
+* The condition can be implicitly uncomputed at the end of both the branches
+* Both branches cannot write to variables of classical types, create arrays or functions (undefined superposition of these objects)
+*/
+
+// Loops
+// sample from geometric(0.5) distribution by counting the number of trials until measuring H(false) returns 0
+def geometric():!ℕ{
+    count := 0;
+    ok    := true;
+    while ok{
+        count += 1;
+        ok = measure(H(false));
+    }
+    return count;
+}
+
+// invalid function that uses a quantum state as a condition
+// error recognized: type of condition should be !𝔹, not 𝔹
+def quantumWhile(const x:𝔹)mfree{
+    while x == 0{
+        // do something
+    }
+}
+
+// Assignments
+// modifying array elements
+def uniformSuperposition[n:!ℕ]():𝔹^n{
+    vec := vector(n, 0:𝔹); // quantum state vector with n |0>'s
+    for i in [0..n){
+        vec[i] := H(vec[i]);
+    }
+    return vec;
+}
+
+// Silq prevents implicitly overwriting vector entries
+// error recognized: reassigned component must be consumed in right-hand side
+def overwrite[n:!ℕ]():𝔹^n{
+    vec := uniformSuperposition[n]();
+    vec[0] := H(vec[1]);
+    return vec;
+}
+
+// Expressions
+/*
+Lambda Abstraction (option 1)
+λ([const] x1:r1, ..., [const] xn:rn) {}
+
+Lambda Abstraction (option 2)
+lambda([const] x1:r1, ..., [const] xn:rn) {}
+*/
+
+// Indexing
+def main1(){
+    x := [0,1,2,3];
+    return x[3]; // returns 3
+}
+
+// you can store numbers in their bit representation as well
+def main2(){
+    x := 5:uint[4];
+    return (x[3], x[2], x[1], x[0]); // returns (0, 1, 0, 1)
+}
+
+// Silq also supports quantum indexing e1[e2], where e2 is non classical, 
+// and e1 does not contain any classical components
+
+
+/*
+=== Functions ===
+
+Lifted Operations:
++, -, *, /
+xorb or ⊕ (bitwise or)
+div (integer division, rounded down)
+^ (exponentiation)
+sin, asin, cos, acos, tan, atan
+ceil, floor, round
+comparators: <, <=, !=, ==, >, >=
+Boolean operators: &&, ||
+sqrt, exp, log
+For log(x) base b, write log(x)/log(b)
+abs, min, max
+
+Reverse:
+reverse is a primitive that allows to reverse a procedure that is mfree
+Example, to reverse the QFT in quantum phase estimation
+ancilla := reverse(QFT[precision])(ancilla);
+
+Other functions:
+measure: t → !t                         // measure a quantum state
+
+H: 𝔹 → mfree 𝔹                          // Hadamard gate
+
+phase: !ℝ → mfree 𝟙                     // phase(r) multiplies the state by exp(i*r)
+
+rotX: !ℝ x 𝔹 → mfree 𝔹                  // rotX(r, b) returns a state b rotated around the X axis by r. |b> → cos(r/2)|b> - i sin(r/2)|1-b>
+
+rotY: !ℝ x 𝔹 → mfree 𝔹                  // rotY(r, b) returns a state b rotated around the Y axis by r. |b> → cos(r/2)|b> + (-1)^b * sin(r/2)|1-b>
+
+rotZ: !ℝ x 𝔹 → mfree 𝔹                  // rotZ(r, b) returns a state b rotated around the Z axis by r. |b> → cos(r/2)|b> - i * (-1)^b * sin(r/2)|b>
+
+X: 𝔹 → mfree 𝔹                          // Pauli X gate |b> → |1-b>
+
+Y: 𝔹 → mfree 𝔹                          // Pauli Y gate |b> → i * (-1)^b * |1-b>
+
+Z: 𝔹 → mfree 𝔹                          // Pauli Z gate |b> → (-1)^b * |b>
+
+dup: const t → qfree t                  // Returns the duplicate of v. |v> → |v> ⊗ |v>
+
+array: !ℕ x const t → qfree t[]         // Returns an array filled with m duplicates of v (analogue of dup)
+
+vector: !ℕ x const t → qfree t^n        // Returns a vector filled with m duplicates of v (analogue of dup)
+
+forget(.=.): t x const t → qfree 𝟙      // forget(x,y) forgets x if it equals y (undefined otherwise). Allows for unsafe uncomputation according to a function 
+
+forget(.): t → qfree 𝟙                  // forget(x) forgets x, assuming Silq can figure out how to uncompute it
+
+.[.]: const t x !uint !→ qfree t        // e1[e2] returns the e2-th element of e1
+
+
+
+=== Debugging ===
+
+dump() - dumps the current program state
+exit() - aborts the program with an error (useful after dump)
+__show__(__query("dep", var)) - shows the dependencies of a variable var (used for uncomputation)
+print(e) - prints the value of a classical expression e
+
+
+=== Entry Point ===
+Through main()
+
+=== Imports ===
+
+// file main.slq
+import lib; // imports f from lib.slq
+
+def main(){
+    return f();
+}
+
+// file lib.slq
+def f(){
+    return 42;
+}
+
+To import from subdirectories, use import directory.file
+*/
