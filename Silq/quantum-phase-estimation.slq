@@ -1,0 +1,129 @@
+/*
+Quantum Phase Estimation in Silq
+
+References:
+[1] https://medium.com/a-bit-of-qubit/quantum-phase-estimation-more-qubits-more-accuracy-a18ea6821073
+[2] https://qiskit.org/textbook/ch-algorithms/quantum-phase-estimation.html
+*/
+
+// initialize the qubits and get them in superposition
+def initialize() mfree {
+    q0 := 0:𝔹;
+    q1 := 0:𝔹;
+    q2 := 0:𝔹;
+
+    q0 := H(q0);
+    q1 := H(q1);
+    q2 := X(q2); // |1> is an eigenvector of S
+
+    return (q0, q1, q2);
+}
+
+// apply the controlled unitary whose phase you want to estimate
+def apply_unitary(q0:𝔹, q1:𝔹, q2:𝔹) mfree {
+    /*
+    this is the unitary that is given to us (whose phase we do not know)
+    for now we will estimate the phase of the S gate, which is pi/2
+    */
+    if q0{
+        q2 := S(q2);
+    }
+
+    if q1{
+        q2 := S(q2);
+    }
+    
+    if q1{
+        q2 := S(q2);
+    }
+    return (q0, q1, q2);
+}
+
+def swap(q0:𝔹,q1:𝔹) {
+    tmp := q0;
+    q0  := q1;
+    q1  := tmp;
+    return (q0, q1);
+}
+
+def inverse_qft(q0:𝔹, q1:𝔹){
+
+    (q0, q1) := swap(q0, q1);
+
+    q0 := H(q0);
+
+    if q0 {
+        q1 := reverse(S)(q1);
+    }
+
+    q1 := H(q1);
+
+    return (q0, q1);
+}
+
+def main(){
+    
+    (q0, q1, q2) := initialize();                 // (|0> + |1>/sqrt(2)) ⊗ (|0> + |1>/sqrt(2)) ⊗ |1> = 1/2 (|001> + |011> + |101> + |111>)
+    
+    /*
+    dump(); results
+    /────────
+    QUANTUM STATE
+     (0.5+0i) · |0⟩₃⊗|0⟩₄⊗|1⟩₅
+    +(0.5+0i) · |0⟩₃⊗|1⟩₄⊗|1⟩₅
+    +(0.5+0i) · |1⟩₃⊗|0⟩₄⊗|1⟩₅
+    +(0.5+0i) · |1⟩₃⊗|1⟩₄⊗|1⟩₅
+
+    VARIABLES
+    q0 ↦ ref(3)
+    q1 ↦ ref(4)
+    q2 ↦ ref(5)
+    ────────/
+
+    This is correct
+    */
+
+    (q0, q1, q2) := apply_unitary(q0, q1, q2);    // 1/2 (|001> - |011> + i|101> - i|111>)
+    
+    /*
+    dump(); results
+    /────────
+    QUANTUM STATE
+                (0.5+0i) · |0⟩₃⊗|0⟩₄⊗|1⟩₅
+    +(-0.5+6.12303e-17i) · |0⟩₃⊗|1⟩₄⊗|1⟩₅
+    + (3.06152e-17+0.5i) · |1⟩₃⊗|0⟩₄⊗|1⟩₅
+    +(-9.18455e-17-0.5i) · |1⟩₃⊗|1⟩₄⊗|1⟩₅
+
+    VARIABLES
+    q0 ↦ ref(3)
+    q1 ↦ ref(4)
+    q2 ↦ ref(5)
+    ────────/
+
+    This is almost correct (some error due to use of floats)
+    */
+
+    (q0, q1) := inverse_qft(q0, q1);              // |1> ⊗ |0> ⊗ |1>
+
+    /*
+    dump(); results
+    /────────
+    QUANTUM STATE
+    (1-6.12303e-17i)·|1⟩₅⊗|1⟩₆⊗|0⟩₇
+
+    VARIABLES
+    q0 ↦ ref(6)
+    q1 ↦ ref(7)
+    q2 ↦ ref(5)
+    ────────/
+    */
+
+    measure(q2);
+    return (measure(q0), measure(q1));
+    
+    /*
+    Answer: 1, 0. Reverse that to get 01 = 1/4 in decimal
+    e^(2πi * 1/4) = e^(iπ/2)
+    Which gives us the original gate applied (S gate)
+    */
+}
